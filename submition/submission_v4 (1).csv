@@ -1,0 +1,16 @@
+import pandas as pd
+
+# Đọc file
+df = pd.read_csv(r'd:\DataThon\submission_kaggle.csv')
+
+# Convert Date từ M/D/YYYY → YYYY-MM-DD
+df['Date'] = pd.to_datetime(df['Date'], format='%m/%d/%Y').dt.strftime('%Y-%m-%d')
+
+# Convert Revenue sang scientific notation (như trong v4)
+df['Revenue'] = df['Revenue'].apply(lambda x: f'{x:.7e}')
+
+# Lưu lại
+df.to_csv(r'd:\DataThon\submission_kaggle.csv', index=False)
+
+print("✅ Conversion complete!")
+print(df.head())
