@@ -576,12 +576,113 @@ Format check:
 - No missing values, no negative values.
 
 Leaderboard/user score:
-- pending
+- `932,192.30362`
 
 Decision:
-- Keep as next candidate to submit.
-- If public score is worse than v3, continue with CatBoost shrinkage `0.50/0.75` or ensemble `v3 + CatBoost`, not LGBM full-strength.
+- Reject as primary direction.
+- Continue with CatBoost shrinkage `0.50/0.75` or ensemble `v3 + CatBoost`, not full-strength residual.
 
 Reason:
-- CatBoost full residual is weaker than LGBM on internal MAE but safer for auto-pick because it avoids the known LGBM public-overfit direction.
-- Mean level remains close to v3, so the submission is changing shape/residual more than global scale.
+- Public score is worse than `v4` (`901,697.83031`) and much worse than `v3` (`887,452.65725`).
+- This confirms CatBoost full residual is still overfitting public test despite strong guardrail metrics.
+
+### 2026-04-28 - v8 guardrail excludes CatBoost sh100
+
+Hypothesis:
+- Since `v7` public score confirmed overfit for CatBoost `sh100`, the next safer direction is CatBoost residual shrinkage `0.75` or an ensemble around `v3`.
+- Auto-pick should stop selecting both `LGBM > 0.50` and `CatBoost >= 1.00` residual variants.
+
+Change:
+- Update `train_forecasting_v2.py`:
+  - Add `PIPELINE_TAG = "v8"` to avoid overwriting `v7` artifacts.
+  - Extend `choose_best_guarded_config()` to exclude:
+    - `residual_meta_lgbm` when `meta_shrinkage > 0.50`
+    - `residual_meta_catboost` when `meta_shrinkage >= 1.00`
+- Rerun full pipeline and generate a new guarded submission.
+
+Output:
+- metrics file: `model_comparison_valid_v8.csv`
+- guardrail fold metrics: `guardrail_fold_metrics_v8.csv`
+- guardrail summary: `guardrail_summary_v8.csv`
+- backtest file: `optimization_backtest_v8.csv`
+- summary file: `forecast_v8_summary.json`
+- submission file: `submition/submission_train_forecasting_v8_guardrail.csv`
+
+Validation evidence:
+- Selected candidate: `residual_meta_catboost / catboost_base_all_cal_sh075_cal2022`
+  - F2022 MAE_sum `861,654.11589`
+  - guardrail_avg_MAE_sum `815,426.96355`
+  - guardrail_worst_MAE_sum `861,654.11589`
+  - guardrail_avg_R2_mean `0.85778`
+- Test mean ratio vs v3:
+  - Revenue `0.96701`
+  - COGS `0.97999`
+
+Leaderboard/user score:
+- `959,732.22531`
+
+Decision:
+- Reject as next primary direction.
+
+Reason:
+- Public score is worse than `v7` (`932,192.30362`) and still far behind `v3` (`887,452.65725`).
+- This confirms even CatBoost shrinkage `0.75` is still pushing forecast shape/level away from what public test wants.
+
+### 2026-04-28 - v9 honest residual validation
+
+Hypothesis:
+- The residual meta-model family is likely being ranked too high because its internal validation is leaky: the meta model was learning on the same holdout year it was being scored on.
+- Once residual validation is made truly out-of-sample, the ranking may shift back toward safer variants around `v3`.
+
+Change:
+- Refactor `ResidualMetaForecaster` in `train_forecasting_v2.py`:
+  - build meta training rows from prior complete years only;
+  - predict the holdout year out-of-sample instead of fitting on that same year;
+  - keep a separate final meta fit for future inference using the latest complete years.
+- Reduce default heavy search space:
+  - no default LGBM residual candidates;
+  - CatBoost residual grid only on `base_all_cal/base5_cal` with shrinkage `0.50/0.75`;
+  - month scaling alpha only `[0.35, 0.50]`.
+- Rerun the pipeline under tag `v9`.
+
+Output:
+- metrics file: `model_comparison_valid_v9.csv`
+- guardrail fold metrics: `guardrail_fold_metrics_v9.csv`
+- guardrail summary: `guardrail_summary_v9.csv`
+- backtest file: `optimization_backtest_v9.csv`
+- summary file: `forecast_v9_summary.json`
+- submission file: `submition/submission_train_forecasting_v9_guardrail.csv`
+
+Validation evidence:
+- Selected candidate: `calendar_blend_month_scaled / seasonal6_week25_trend0_month_alpha50`
+  - F2022 MAE_sum `999,228.97028`
+  - guardrail_avg_MAE_sum `960,599.57889`
+  - guardrail_worst_MAE_sum `999,228.97028`
+  - guardrail_avg_R2_mean `0.81714`
+- Backup cluster closest behind:
+  - `seasonal6_week25_trend0_month_alpha35`
+  - `ensemble_v3_catboost / v3w80_catboost_base_all_cal_sh075`
+  - `calendar_blend_valid_scaled / seasonal6_week25_trend0_scaled`
+- Test mean ratio vs v3:
+  - Revenue `1.00053`
+  - COGS `1.00497`
+
+Interpretation:
+- After removing the leakage effect, residual candidates are no longer the top family.
+- The strongest honest candidate is now a conservative month-level calibration around `v3`, which matches the public-score evidence much better.
+
+Leaderboard/user score:
+- `915,212.22507`
+
+Decision:
+- Keep as best post-leakage candidate so far, but not current best overall.
+
+Reason:
+- `v9` stays very close to `v3` in mean level while making a limited month-level correction.
+- This is the first candidate after the leakage fix whose selection logic is aligned with the external scores we have observed.
+- Public score improved materially over `v7` and `v8`, which supports the leakage-fix diagnosis:
+  - vs `v7`: `932,192.30362 -> 915,212.22507` (`-16,980.07855`)
+  - vs `v8`: `959,732.22531 -> 915,212.22507` (`-44,520.00024`)
+- It still does not beat:
+  - `v4`: `901,697.83031`
+  - `v3`: `887,452.65725`
