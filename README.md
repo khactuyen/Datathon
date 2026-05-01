@@ -1,7 +1,7 @@
 <div align="center">
   <h1>🏆 Vintelligence DataThon 2026 - The Gridbreakers</h1>
   <h3>Giải pháp Dự báo Doanh thu lai (Hybrid Forecasting) & Trực quan hoá Dữ liệu</h3>
-  <p><em>Sản phẩm dự thi Vòng 1 của Đội: <b>AI Dream</b> (hoặc điền tên đội của bạn)</em></p>
+  <p><em>Sản phẩm dự thi Vòng 1 của Đội: <b>AI Dream</b> 
 </div>
 
 ---
