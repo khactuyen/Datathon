@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+ENV/
+env/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# VS Code
+.vscode/
+
+# Data
+dataset/
+*.csv
+!submissions/*.csv
+
+# OS generated files
+.DS_Store
+Thumbs.db
